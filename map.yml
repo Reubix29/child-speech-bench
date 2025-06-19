@@ -1,0 +1,4 @@
+dataset_path: "data/my_dataset" # path to the dataset
+representation_function: "mhubert" # the name of your custom representation function in generate_representations.py
+distance_function: "dtw" # options: dtw, ned, or a custom function
+template_ranking: "avg" # options: avg, min

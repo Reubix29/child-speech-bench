@@ -1,0 +1,3 @@
+name: child-speech-bench
+dependencies:
+  - python=3
