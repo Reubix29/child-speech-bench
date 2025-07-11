@@ -25,7 +25,14 @@ The goal is to find the combination of representation and distance method that g
 ## Quick Start
 ### Programmatic Usage
 
-1. Install the dependencies in `environment.yml` or run `conda env create -f environment.yml`.
+1. Install the dependencies:
+
+    - Make the setup file executable by running ``chmod +x setup.sh``, then run ``setup.sh``.
+
+    Alternatively, manually install the dependencies:
+    - Run ``conda env create -f environment.yml``
+    - Run ``cd dtw`` and then ``make`` to compile the cython code for the dynamic time warping module used in the benchmark.
+
 
 2. Download an applicable few-shot isolated word dataset, like [ISACS](https://reubix29.github.io/isolated-afrikaans-child-speech/), or [use your own](#use-your-own-dataset).
 
@@ -42,8 +49,11 @@ The goal is to find the combination of representation and distance method that g
         - **ned**: normalised edit distance. This is the default for discrete representations.
         - or [create your own](#test-a-custom-representation-or-distance-method)
     - Choose whether to average (**avg**) the distances from the query to the template representations, or select the minimum distance (**min**).
-
-
+    - Choose the speaker you would like to use. In ISACS, there are four speakers available:
+        - sp_1
+        - sp_2
+        - sp_3
+        - child
 
 5. In your terminal, run `python run_benchmark.py`, which should result in a list of metrics.
 

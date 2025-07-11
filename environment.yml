@@ -1,3 +1,20 @@
 name: child-speech-bench
+channels:
+  - conda-forge
+  - defaults
 dependencies:
-  - python=3
+  - python=3.10
+  - numpy
+  - pyyaml
+  - torchaudio
+  - librosa
+  - scikit-learn
+  - tqdm
+  - pydub
+  - editdistance
+  - transformers
+  - pytorch
+  - ffmpeg        
+  - cython        
+  - setuptools 
+  - pip
