@@ -134,15 +134,16 @@ def calculate_metrics(file_path, template_dirname, rep_fn, dist_fn, template_ran
                         distances = np.mean(distances, axis=0)
                     elif template_ranking == "min":
                         distances = np.min(distances, axis=0)
-                    bucket_distances.append(distances)
+                    bucket_distances.append(distances[0][0])
                 all_distances[set].append(bucket_distances)
                 # Append ground truth labels
-                groundtruths[set].append([1 if bucket.name == query_file.stem else 0 for query_file in bucket.glob("*.wav")])
+                groundtruths[set].append([1 if bucket.name == query_file.name.split("_")[0] else 0 for query_file in bucket.glob("*.wav")])
                 
 
     # Calculate the threshold that maximises the balanced accuracy on the dev set
-    dev_distances = np.array(all_distances["dev"])
-    dev_groundtruths = np.array(groundtruths["dev"])
+    # Flatten the distances and labels
+    dev_distances = np.array([d for bucket in all_distances["dev"] for d in bucket])
+    dev_groundtruths = np.array([g for bucket in groundtruths["dev"] for g in bucket])
 
     thresholds = np.linspace(0, 1, 100)
     best_threshold = 0
@@ -150,15 +151,16 @@ def calculate_metrics(file_path, template_dirname, rep_fn, dist_fn, template_ran
 
     for threshold in thresholds:
         predictions = (dev_distances < threshold).astype(int)
-        bacc = balanced_accuracy_score(dev_groundtruths.flatten(), predictions.flatten())
+        bacc = balanced_accuracy_score(dev_groundtruths, predictions)
         if bacc > best_bacc:
             best_bacc = bacc
             best_threshold = threshold
+
     print(f"Best threshold: {best_threshold}, Balanced Accuracy on dev set: {best_bacc}")
 
     # Using the best threshold, calculate distances on the test set
-    test_distances = np.array(all_distances["test"]).flatten()
-    test_groundtruths = np.array(groundtruths["test"]).flatten()
+    test_distances = np.array([d for bucket in all_distances["test"] for d in bucket])
+    test_groundtruths = np.array([g for bucket in groundtruths["test"] for g in bucket])
     test_predictions = (test_distances < best_threshold).astype(int)
     metrics = {
         "roc_auc": roc_auc_score(test_groundtruths, test_distances),

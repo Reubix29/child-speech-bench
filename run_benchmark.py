@@ -20,31 +20,31 @@ def get_settings(file_path):
 
 
 if __name__ =="__main__":
-    parser = argparse.ArgumentParser(description="Run benchmark tests.")
-    parser.add_argument("--dataset_path", type=str, help="Path to the dataset.")
-    parser.add_argument("--representation_fn", type=str, default="mhubert", help="Name of the representation function to use.")
-    parser.add_argument("--distance_fn", type=str, default="dtw", help="Name of the distance function to use.")
-    parser.add_argument("--template_ranking", type=str, default="avg", help="Template ranking method (avg/min) to use.")
-    parser.add_argument("--template_dirname", type=str, default="sp_1", help="Directory name for templates within the dataset.")
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser(description="Run benchmark tests.")
+    # parser.add_argument("--dataset_path", type=str, help="Path to the dataset.")
+    # parser.add_argument("--representation_fn", type=str, default="mhubert", help="Name of the representation function to use.")
+    # parser.add_argument("--distance_fn", type=str, default="dtw", help="Name of the distance function to use.")
+    # parser.add_argument("--template_ranking", type=str, default="avg", help="Template ranking method (avg/min) to use.")
+    # parser.add_argument("--template_dirname", type=str, default="sp_1", help="Directory name for templates within the dataset.")
+    # args = parser.parse_args()
 
-    # Fetch the representation and distance functions
-    if args.dataset_path:
-        print(f"Using dataset path: {args.dataset_path}")
-        dataset_path = Path(args.dataset_path)
-        representation_fn_name = args.representation_fn
-        distance_fn_name = args.distance_fn
-        template_ranking = args.template_ranking
-        template_dirname = args.template_dirname
-    else:
-        settings = get_settings(Path("map.yml"))
-        dataset_path = Path(settings.get("dataset_path", None))
-        if dataset_path is None:
-            raise ValueError("Dataset path must be specified either via command line or in map.yaml.")        
-        representation_fn_name = settings.get("representation_fn", "mhubert")
-        distance_fn_name = settings.get("distance_fn", "dtw")
-        template_ranking = settings.get("template_ranking", "avg")
-        template_dirname = settings.get("template_dirname", "sp_1")
+    # # Fetch the representation and distance functions
+    # if args.dataset_path:
+    #     print(f"Using dataset path: {args.dataset_path}")
+    #     dataset_path = Path(args.dataset_path)
+    #     representation_fn_name = args.representation_fn
+    #     distance_fn_name = args.distance_fn
+    #     template_ranking = args.template_ranking
+    #     template_dirname = args.template_dirname
+    # else:
+    settings = get_settings(Path("map.yml"))
+    dataset_path = Path(settings.get("dataset_path", None))
+    if dataset_path is None:
+        raise ValueError("Dataset path must be specified either via command line or in map.yaml.")        
+    representation_fn_name = settings.get("representation_fn", "mhubert")
+    distance_fn_name = settings.get("distance_fn", "dtw")
+    template_ranking = settings.get("template_ranking", "avg")
+    template_dirname = settings.get("template_dirname", "sp_1")
 
     initialize_models()
     rep_fn = get_representation_function(representation_fn_name)
