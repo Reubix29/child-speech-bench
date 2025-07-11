@@ -11,6 +11,7 @@ import numpy as np
 from transformers import AutoProcessor, HubertModel
 import helpers
 import editdistance
+from speech_dtw.qbe import parallel_dtw_sweep_min as dtw
 
 rep_registry, dist_registry, models = {}, {}, {}
 
@@ -91,15 +92,15 @@ def generate_mfccs(audio):
     
     return mfccs
 
-@register_rep_fn("hubert_discrete")
-def generate_speech_units(audio):
-    #TODO
-    pass
+# @register_rep_fn("hubert_discrete")
+# def generate_speech_units(audio):
+#     #TODO
+#     pass
 
-@register_rep_fn("whisper")
-def generate_whisper_representations(audio, processor=None, model=None):
-    #TODO
-    pass
+# @register_rep_fn("whisper")
+# def generate_whisper_representations(audio, processor=None, model=None):
+#     #TODO
+#     pass
 
 def get_representation_function(name):
     """Retrieve a registered representation function by name."""
@@ -126,8 +127,9 @@ def dtw_distance(x, y):
     Returns:
         float: DTW distance between x and y.
     """
-    #TODO
-    pass
+    dist = dtw(x, y)
+    return dist
+    
 
 @register_dist_fn("ned")
 def ned(x, y):

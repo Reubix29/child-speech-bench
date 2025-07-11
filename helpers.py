@@ -6,8 +6,8 @@ import torchaudio
 from torchaudio.transforms import Resample
 from sklearn.metrics import roc_auc_score, precision_score, recall_score, f1_score, balanced_accuracy_score
 import torch
+from tqdm import tqdm
 import tempfile
-from generate_representations import initialize_models
 
 
 def validate_rep_fn(func):
@@ -29,7 +29,7 @@ def validate_rep_fn(func):
 
     print(f"Function '{func.__name__}' validated successfully.")
 
-def validate_rep_fn(func):
+def validate_dist_fn(func):
     sig = inspect.signature(func)
     params = sig.parameters
 
@@ -107,14 +107,14 @@ def calculate_metrics(file_path, template_dirname, rep_fn, dist_fn, template_ran
     Returns:
     - metrics (dict): Dictionary containing calculated metrics.
     """
-    audio, sr, _ = preprocess(file_path)
     template_path = file_path / "templates" / template_dirname
     # First calculate the distances for the dev and test sets
     all_distances = {"dev": [], "test": []}
     groundtruths = {"dev": [], "test": []}
 
     for set in ["dev", "test"]:
-        for bucket in (file_path / "query" / set).iterdir():
+        querypath = file_path / "query" / set
+        for bucket in tqdm(querypath.iterdir(), total=len(list(querypath.iterdir())), desc=f"Processing {set} set"):
             if bucket.is_dir():
                 # Calculate representations for templates
                 template_features, bucket_distances = [], []
