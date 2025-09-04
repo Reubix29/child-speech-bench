@@ -4,11 +4,13 @@ An example script to generate representations for a dataset using mHuBERT, HuBER
 Author: Reuben Smit
 Date: 2025
 """
+import re
 from pathlib import Path
 import torch
 import librosa
 import numpy as np
-from transformers import AutoProcessor, HubertModel
+from transformers import AutoProcessor, HubertModel, AutoModelForSpeechSeq2Seq, pipeline
+from sklearn.linear_model import LogisticRegression
 import helpers
 import editdistance
 from speech_dtw.qbe import parallel_dtw_sweep_min as dtw
@@ -31,16 +33,42 @@ def register_dist_fn(name):
         return func
     return decorator
 
-
-def initialize_models():
+def initialize_models(rep_fn_names=None, training_data=None):
     """Initialize and store models and processors globally."""
     global models
 
     # Add models and processors to the global models dictionary
-
-    models["mhubert_processor"] = AutoProcessor.from_pretrained("facebook/hubert-large-ls960-ft")
-    models["mhubert_model"] = HubertModel.from_pretrained("utter-project/mHuBERT-147")
-    
+    if "mhubert" in rep_fn_names:
+        # mHuBERT
+        models["mhubert_processor"] = AutoProcessor.from_pretrained("facebook/hubert-large-ls960-ft")
+        models["mhubert_model"] = HubertModel.from_pretrained("utter-project/mHuBERT-147")
+    elif "hubert_discrete" in rep_fn_names:
+        # HuBERT Discrete (https://github.com/bshall/dusted)
+        hubert, encode = torch.hub.load("bshall/dusted:main", "hubert", language="english", trust_repo=True)
+        kmeans, segment = torch.hub.load("bshall/dusted:main", "kmeans", language="english", trust_repo=True)
+        models["hubert_discrete"] = hubert
+        models["hubert_discrete_kmeans"] = kmeans
+        models["hubert_discrete_encode"] = encode
+        models["hubert_discrete_segment"] = segment 
+    elif "whisper" in rep_fn_names:
+        # Whisper ASR
+        whisper = AutoModelForSpeechSeq2Seq.from_pretrained(
+                "openai/whisper-small", torch_dtype=torch.float32, low_cpu_mem_usage=False, use_safetensors=True
+            )
+        whisper_processor = AutoProcessor.from_pretrained("openai/whisper-small")
+        whisper_processor.tokenizer.set_prefix_tokens(language="english", task="transcribe")
+        whisper_pipe = pipeline(
+                "automatic-speech-recognition",
+                model=whisper,
+                tokenizer=whisper_processor.tokenizer,
+                feature_extractor=whisper_processor.feature_extractor,
+                torch_dtype=torch.float32,
+                device="cpu",
+            )
+        models["whisper"] = whisper_pipe
+        models["whisper_processor"] = whisper_processor
+    else:
+        raise ValueError("No valid representation function names provided for model initialization.")
     print("Models initialized successfully.")
 
 
@@ -90,17 +118,39 @@ def generate_mfccs(audio):
         n_mfcc=13
         )
     
-    return mfccs
+    mfccs = mfccs.T 
+    
+    return [mfccs]
 
-# @register_rep_fn("hubert_discrete")
-# def generate_speech_units(audio):
-#     #TODO
-#     pass
+@register_rep_fn("hubert_discrete")
+def generate_speech_units(audio):
+    hubert = models.get("hubert_discrete")
+    encode = models.get("hubert_discrete_encode")
+    kmeans = models.get("hubert_discrete_kmeans")
+    segment = models.get("hubert_discrete_segment")
+    if hubert is None or encode is None or kmeans is None or segment is None:
+        raise RuntimeError("Models not initialized. Call 'initialize_models()' first.")
 
-# @register_rep_fn("whisper")
-# def generate_whisper_representations(audio, processor=None, model=None):
-#     #TODO
-#     pass
+ 
+    audio = audio.unsqueeze(0)  
+
+    # Pass audio through the encode function
+    x = encode(hubert, audio).squeeze().cpu().numpy()
+
+    # Pass encoded output through the segment function
+    units, _ = segment(x, kmeans.cluster_centers_, gamma=0.2)  # gamma=0.2 recommended in paper
+
+    return units
+
+@register_rep_fn("whisper")
+def generate_whisper_representations(audio):
+    whisper = models.get("whisper")
+
+    transcription = whisper(audio.numpy().squeeze(), generate_kwargs={"language": "english", "forced_decoder_ids": None})["text"]
+    
+    # Decode to text
+    cleaned_transcription = re.sub(r"[^\w\s]", "", transcription).lower()
+    return cleaned_transcription
 
 def get_representation_function(name):
     """Retrieve a registered representation function by name."""

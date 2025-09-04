@@ -61,7 +61,8 @@ if __name__ =="__main__":
         template_dirname=template_dirname
     )
 
-    print("Metrics calculated:")
+    print("\nMetrics on the test set:\n==============================")
     for key, value in metrics.items():
-        print(f"{key}: {value}")
+        print(f"{key}: {value:.4f}")
+    print("==============================")
 

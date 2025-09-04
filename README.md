@@ -2,13 +2,13 @@
 A benchmark for evaluating speech representation methods on child speech, with a focus on low-resource and few-shot learning scenarios.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-<!-- [![paper](https://img.shields.io/badge/Paper-arXiv-red.svg)](https://arxiv.org/abs/2506.01510) -->
+[![paper](https://img.shields.io/badge/Paper-arXiv-red.svg)](https://arxiv.org/abs/2507.12217)
 
 ## Overview
 
 Imagine a child in a low-resource setting is shown a word on a screen and asked to read it aloud. The audio they produce is recorded and then compared to **adult template recordings** of that same word. By measuring the distance between the child’s recording and the templates, we decide whether the word they said matches the expected one.
 
-![Few-shot paper example](fewshot.png)
+![Few-shot paper example](fig/system.png)
 
 This benchmark evaluates how well different **speech representation** and **distance calculation** methods can classify the spoken word as a match or not. The process works as follows:
 
@@ -49,7 +49,7 @@ The goal is to find the combination of representation and distance method that g
         - **ned**: normalised edit distance. This is the default for discrete representations.
         - or [create your own](#test-a-custom-representation-or-distance-method)
     - Choose whether to average (**avg**) the distances from the query to the template representations, or select the minimum distance (**min**).
-    - Choose the speaker you would like to use. In ISACS, there are four speakers available:
+    - Choose the speaker you would like to use. In [ISACS](https://reubix29.github.io/isolated-afrikaans-child-speech/), there are four speakers available:
         - sp_1
         - sp_2
         - sp_3
@@ -90,10 +90,10 @@ If you want to test methods on your own data, the dataset should be structured a
 │   └── ...
 ```
 
-Note:
-- For both the dev and test sets, each word must have an equal number of positive and negative examples. This ensures that evaluation metrics like precision and recall remain fair and balanced.
-- Ensure that speakers in the dev and test sets are unique (i.e., they do not appear in both sets).
-- For each template word, make sure to include the same number of samples. This keeps comparisons across words consistent.
+> Note:
+> - For both the dev and test sets, each word must have an equal number of positive and negative examples. This ensures that evaluation metrics like precision and recall remain fair and balanced.
+> - Ensure that speakers in the dev and test sets are unique (i.e., they do not appear in both sets).
+> - For each template word, make sure to include the same number of samples. This keeps comparisons across words consistent.
 
 For an example of correct structure, look at the structure of [ISACS](https://reubix29.github.io/isolated-afrikaans-child-speech/).
 
@@ -110,4 +110,11 @@ To register a distance function, you may likewise add a `@register_dist_fn("dist
 
 ## Results
 
+| Representation| Recall | Precision | F1 | ROC AUC | Balanced Accuracy |
+|:---|:---:|:---:|:---:|:---:|:---:|
+| **mHuBERT continuous**| 58.0 | 65.2 | 59.8 | 66.0 | **65.6** | 
+| **MFCCs** | **71.6** | 63.3 | **64.4** | 70.5 | 65.4 |
+| **Whisper English ASR** | 47.7 | **73.6** | 53.7 | **70.7** | 64.8| 
+| **HuBERT discrete** | 66.2 | 60.1 | 61.3 | 65.3 | 60.6 |
+---
 

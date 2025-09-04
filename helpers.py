@@ -4,7 +4,7 @@ from pathlib import Path
 from pydub import AudioSegment
 import torchaudio
 from torchaudio.transforms import Resample
-from sklearn.metrics import roc_auc_score, precision_score, recall_score, f1_score, balanced_accuracy_score
+from sklearn.metrics import roc_auc_score, precision_score, recall_score, f1_score, balanced_accuracy_score, accuracy_score
 import torch
 from tqdm import tqdm
 import tempfile
@@ -109,8 +109,8 @@ def calculate_metrics(file_path, template_dirname, rep_fn, dist_fn, template_ran
     """
     template_path = file_path / "templates" / template_dirname
     # First calculate the distances for the dev and test sets
-    all_distances = {"dev": [], "test": []}
-    groundtruths = {"dev": [], "test": []}
+    all_distances = {"dev": {}, "test": {}}
+    groundtruths = {"dev": {}, "test": {}}
 
     for set in ["dev", "test"]:
         querypath = file_path / "query" / set
@@ -131,43 +131,53 @@ def calculate_metrics(file_path, template_dirname, rep_fn, dist_fn, template_ran
                     # Calculate distances using the distance function
                     distances = [dist_fn(query_features, template_feature) for template_feature in template_features]
                     if template_ranking == "avg":
-                        distances = np.mean(distances, axis=0)
+                        distance_val = float(np.mean(distances))
                     elif template_ranking == "min":
-                        distances = np.min(distances, axis=0)
-                    bucket_distances.append(distances[0][0])
-                all_distances[set].append(bucket_distances)
+                        distance_val = float(np.min(distances))
+                    else:
+                        raise ValueError(f"Unknown template_ranking: {template_ranking}")
+
+                    bucket_distances.append(distance_val)
+
+                all_distances[set][bucket.name] = bucket_distances
                 # Append ground truth labels
-                groundtruths[set].append([1 if bucket.name == query_file.name.split("_")[0] else 0 for query_file in bucket.glob("*.wav")])
+                groundtruths[set][bucket.name] = [1 if bucket.name == query_file.name.split("_")[0] else 0 for query_file in bucket.glob("*.wav")]
                 
 
     # Calculate the threshold that maximises the balanced accuracy on the dev set
-    # Flatten the distances and labels
-    dev_distances = np.array([d for bucket in all_distances["dev"] for d in bucket])
-    dev_groundtruths = np.array([g for bucket in groundtruths["dev"] for g in bucket])
 
     thresholds = np.linspace(0, 1, 100)
-    best_threshold = 0
-    best_bacc = 0
-
+    accuracies = {}
     for threshold in thresholds:
-        predictions = (dev_distances < threshold).astype(int)
-        bacc = balanced_accuracy_score(dev_groundtruths, predictions)
-        if bacc > best_bacc:
-            best_bacc = bacc
-            best_threshold = threshold
+        dev_distances = np.concatenate([np.array(all_distances["dev"][cls]) for cls in all_distances["dev"]])
+        dev_groundtruth = np.concatenate([np.array(groundtruths["dev"][cls]) for cls in groundtruths["dev"]])
+        dev_bacc = balanced_accuracy_score(dev_groundtruth, (dev_distances < threshold).astype(int))
+        accuracies[threshold] = dev_bacc
 
-    print(f"Best threshold: {best_threshold}, Balanced Accuracy on dev set: {best_bacc}")
+    best_threshold = max(accuracies, key=accuracies.get)
 
     # Using the best threshold, calculate distances on the test set
-    test_distances = np.array([d for bucket in all_distances["test"] for d in bucket])
-    test_groundtruths = np.array([g for bucket in groundtruths["test"] for g in bucket])
-    test_predictions = (test_distances < best_threshold).astype(int)
+
+    test_bacc, test_roc, test_precision, test_recall, test_f1 = [], [], [], [], []
+    for cls in all_distances["test"]:
+        distances = np.array(all_distances["test"][cls])
+        groundtruth = np.array(groundtruths["test"][cls])
+        predictions = (distances < best_threshold).astype(int)
+        test_roc.append(roc_auc_score(groundtruth, 1 - distances))
+        test_precision.append(precision_score(groundtruth, predictions, zero_division=0))
+        test_recall.append(recall_score(groundtruth, predictions, zero_division=0))
+        test_f1.append(f1_score(groundtruth, predictions, zero_division=0))
+
+    test_distances = np.concatenate([np.array(all_distances["test"][cls]) for cls in all_distances["test"]])
+    test_groundtruth = np.concatenate([np.array(groundtruths["test"][cls]) for cls in groundtruths["test"]])
+
+    test_bacc = balanced_accuracy_score(test_groundtruth, (test_distances < best_threshold).astype(int))
     metrics = {
-        "roc_auc": roc_auc_score(test_groundtruths, test_distances),
-        "precision": precision_score(test_groundtruths, test_predictions),
-        "recall": recall_score(test_groundtruths, test_predictions),
-        "f1": f1_score(test_groundtruths, test_predictions),
-        "balanced_accuracy": balanced_accuracy_score(test_groundtruths, test_predictions)
+        "Recall": np.mean(test_recall),
+        "Precision": np.mean(test_precision),
+        "F1": np.mean(test_f1),
+        "ROC AUC": np.mean(test_roc),
+        "Balanced Accuracy": test_bacc
     }
     return metrics
 
