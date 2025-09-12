@@ -4,11 +4,68 @@ from pathlib import Path
 from pydub import AudioSegment
 import torchaudio
 from torchaudio.transforms import Resample
-from sklearn.metrics import roc_auc_score, precision_score, recall_score, f1_score, balanced_accuracy_score, accuracy_score
+from sklearn.metrics import (
+    balanced_accuracy_score,
+    roc_auc_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    confusion_matrix,
+)
 import torch
 from tqdm import tqdm
 import tempfile
 
+def cache_representations(rep_fn, dataset_path, template_dirname, rep_type="continuous"):
+    """
+    Helper function to cache representations for a dataset.
+    """
+
+    root_path = Path("data/cache/{rep_fn.__name__}")
+    root_path.mkdir(parents=True, exist_ok=True)
+    
+    # Check whether the representations are already cached
+    if (root_path / "templates" / template_dirname).exists() and (root_path / "query" / "dev").exists() and (root_path / "query" / "test").exists():
+        print(f"Representations for {rep_fn.__name__} already cached. Skipping caching step.")
+        return
+
+    # Cache the template representations
+    cache_template_path = root_path / "templates"
+    cache_template_path.mkdir(parents=True, exist_ok=True)
+
+    for cls in tqdm(list((dataset_path / "templates" / template_dirname)), desc="Caching templates"):
+        for template_file in cls.glob("*.wav"):
+            audio, _, _ = preprocess(template_file)
+            representation = rep_fn(audio)
+            save_path = cache_template_path / cls.name
+            save_path.mkdir(parents=True, exist_ok=True)
+            if rep_type == "discrete":
+                # For discrete representations, save as a textfile
+                with open(save_path / (template_file.stem + ".pt"), "w") as f:
+                    f.write(" ".join(map(str, representation)))
+            else:
+                torch.save(representation, save_path / (template_file.stem + ".pt"))
+
+    for set in ["dev", "test"]:
+        for cls in tqdm(list((dataset_path / "query" / set)), desc=f"Caching {set} set"):
+            for audio_file in cls.glob("*.wav"):
+                audio, _, _ = preprocess(audio_file)
+                representation = rep_fn(audio)
+                save_path = root_path / "query" / set / cls.name
+                save_path.mkdir(parents=True, exist_ok=True)
+                if rep_type == "discrete":
+                # For discrete representations, save as a textfile
+                    with open(save_path / (template_file.stem + ".pt"), "w") as f:
+                        f.write(" ".join(map(str, representation))) 
+                else:
+                    torch.save(representation, save_path / (template_file.stem + ".pt"))
+
+def load_cached_representation(rep_fn, dataset_path):
+    """
+    Helper function to load cached representations for a dataset.
+    """
+    #TODO
+    pass
 
 def validate_rep_fn(func):
     sig = inspect.signature(func)
@@ -95,91 +152,133 @@ def preprocess(file_path, resample_rate=16000, overwrite=False):
 
     return audio, sr, used_path
 
+def extract_scores_and_labels(all_distances, groundtruths, strategy="avg"):
+    """
+    Flatten distances into scores and labels, consistent with old pipeline.
+    
+    Args:
+        all_distances (dict): {"dev": {class: [distances]}, "test": {...}}
+        groundtruths (dict): {"dev": {class: [labels]}, "test": {...}}
+        strategy (str): "min" or "avg" (only needed if you stored multiple template distances).
+    
+    Returns:
+        scores_dev, labels_dev, scores_test, labels_test
+    """
+    # Convert distances -> scores (1 - distance), as in old code
+    dev_distances = np.concatenate([np.array(all_distances["dev"][cls]) for cls in all_distances["dev"]])
+    dev_labels = np.concatenate([np.array(groundtruths["dev"][cls]) for cls in groundtruths["dev"]])
+    dev_scores = 1 - dev_distances
+
+    test_distances = np.concatenate([np.array(all_distances["test"][cls]) for cls in all_distances["test"]])
+    test_labels = np.concatenate([np.array(groundtruths["test"][cls]) for cls in groundtruths["test"]])
+    test_scores = 1 - test_distances
+
+    return dev_scores, dev_labels, test_scores, test_labels
+
 def calculate_metrics(file_path, template_dirname, rep_fn, dist_fn, template_ranking):
     """
     Calculate classification metrics for a given dataset, using a representation function and a distance function.
 
     Args:
     - file_path (str or Path): Path to the dataset.
+    - template_dirname (str): Name of the template subdirectory.
     - rep_fn (callable): Function to generate representations.
     - dist_fn (callable): Function to calculate distances.
+    - template_ranking (str): "avg" or "min".
 
     Returns:
     - metrics (dict): Dictionary containing calculated metrics.
     """
     template_path = file_path / "templates" / template_dirname
-    # First calculate the distances for the dev and test sets
     all_distances = {"dev": {}, "test": {}}
     groundtruths = {"dev": {}, "test": {}}
 
-    for set in ["dev", "test"]:
-        querypath = file_path / "query" / set
-        for bucket in tqdm(querypath.iterdir(), total=len(list(querypath.iterdir())), desc=f"Processing {set} set"):
+    # ---- Step 1: collect distances and ground truths ----
+    for split in ["dev", "test"]:
+        querypath = file_path / "query" / split
+        for bucket in tqdm(
+            list(querypath.iterdir()), desc=f"Processing {split} set"
+        ):
             if bucket.is_dir():
-                # Calculate representations for templates
-                template_features, bucket_distances = [], []
+                # Load template features
+                template_features = []
                 templates = list((template_path / bucket.name).glob("*.wav"))
                 if not templates:
                     raise FileNotFoundError(f"No templates found in {template_path / bucket.name}")
-                else:
-                    for template_file in templates:
-                        template_audio, _, _ = preprocess(template_file)
-                        template_features.append(rep_fn(template_audio))
+                for template_file in templates:
+                    template_audio, _, _ = preprocess(template_file)
+                    template_features.append(rep_fn(template_audio))
+
+                # Query distances
+                bucket_distances = []
                 for audio_file in bucket.glob("*.wav"):
                     audio, sr, _ = preprocess(audio_file)
                     query_features = rep_fn(audio)
-                    # Calculate distances using the distance function
-                    distances = [dist_fn(query_features, template_feature) for template_feature in template_features]
+                    distances = [dist_fn(query_features, tf) for tf in template_features]
                     if template_ranking == "avg":
                         distance_val = float(np.mean(distances))
                     elif template_ranking == "min":
                         distance_val = float(np.min(distances))
                     else:
                         raise ValueError(f"Unknown template_ranking: {template_ranking}")
-
                     bucket_distances.append(distance_val)
 
-                all_distances[set][bucket.name] = bucket_distances
-                # Append ground truth labels
-                groundtruths[set][bucket.name] = [1 if bucket.name == query_file.name.split("_")[0] else 0 for query_file in bucket.glob("*.wav")]
-                
+                all_distances[split][bucket.name] = bucket_distances
+                groundtruths[split][bucket.name] = [
+                    1 if bucket.name == query_file.name.split("_")[0] else 0
+                    for query_file in bucket.glob("*.wav")
+                ]
 
-    # Calculate the threshold that maximises the balanced accuracy on the dev set
+    # ---- Step 2: find best threshold on dev (max balanced accuracy) ----
+    dev_distances = np.concatenate([np.array(all_distances["dev"][cls]) for cls in all_distances["dev"]])
+    dev_groundtruth = np.concatenate([np.array(groundtruths["dev"][cls]) for cls in groundtruths["dev"]])
 
-    thresholds = np.linspace(0, 1, 100)
-    accuracies = {}
-    for threshold in thresholds:
-        dev_distances = np.concatenate([np.array(all_distances["dev"][cls]) for cls in all_distances["dev"]])
-        dev_groundtruth = np.concatenate([np.array(groundtruths["dev"][cls]) for cls in groundtruths["dev"]])
-        dev_bacc = balanced_accuracy_score(dev_groundtruth, (dev_distances < threshold).astype(int))
-        accuracies[threshold] = dev_bacc
+    thresholds = np.linspace(0, 1, 200)
+    baccs = {}
+    for th in thresholds:
+        preds = (dev_distances < th).astype(int)
+        baccs[th] = balanced_accuracy_score(dev_groundtruth, preds)
+    best_threshold = max(baccs, key=baccs.get)
 
-    best_threshold = max(accuracies, key=accuracies.get)
+    # ---- Step 3: evaluate on test, per class, then average ----
+    test_precision, test_recall, test_f1, test_roc, test_far, test_mr = [], [], [], [], [], []
 
-    # Using the best threshold, calculate distances on the test set
-
-    test_bacc, test_roc, test_precision, test_recall, test_f1 = [], [], [], [], []
     for cls in all_distances["test"]:
         distances = np.array(all_distances["test"][cls])
         groundtruth = np.array(groundtruths["test"][cls])
         predictions = (distances < best_threshold).astype(int)
-        test_roc.append(roc_auc_score(groundtruth, 1 - distances))
+
+        # Core metrics
+        if len(np.unique(groundtruth)) > 1:
+            test_roc.append(roc_auc_score(groundtruth, 1 - distances))
+        else:
+            # If only one class, AUC is undefined → skip
+            test_roc.append(np.nan)
+
         test_precision.append(precision_score(groundtruth, predictions, zero_division=0))
         test_recall.append(recall_score(groundtruth, predictions, zero_division=0))
         test_f1.append(f1_score(groundtruth, predictions, zero_division=0))
 
-    test_distances = np.concatenate([np.array(all_distances["test"][cls]) for cls in all_distances["test"]])
-    test_groundtruth = np.concatenate([np.array(groundtruths["test"][cls]) for cls in groundtruths["test"]])
+        tn, fp, fn, tp = confusion_matrix(groundtruth, predictions, labels=[0,1]).ravel()
+        false_alarm_rate = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+        miss_rate = fn / (fn + tp) if (fn + tp) > 0 else 0.0
+        test_far.append(false_alarm_rate)
+        test_mr.append(miss_rate)
 
-    test_bacc = balanced_accuracy_score(test_groundtruth, (test_distances < best_threshold).astype(int))
+    # Aggregate across classes
     metrics = {
-        "Recall": np.mean(test_recall),
-        "Precision": np.mean(test_precision),
-        "F1": np.mean(test_f1),
-        "ROC AUC": np.mean(test_roc),
-        "Balanced Accuracy": test_bacc
+        "Recall": np.nanmean(test_recall),
+        "Precision": np.nanmean(test_precision),
+        "F1": np.nanmean(test_f1),
+        "ROC AUC": np.nanmean(test_roc),
+        "False Alarm Rate": np.nanmean(test_far),
+        "Miss Rate": np.nanmean(test_mr),
+        "Balanced Accuracy": balanced_accuracy_score(
+            np.concatenate([groundtruths["test"][cls] for cls in groundtruths["test"]]),
+            (np.concatenate([all_distances["test"][cls] for cls in all_distances["test"]]) < best_threshold).astype(int),
+        ),
     }
-    return metrics
 
+    return metrics
 
     

@@ -45,7 +45,7 @@ if __name__ =="__main__":
         template_ranking = settings.get("template_ranking", "avg")
         template_dirname = settings.get("template_dirname", "sp_1")
 
-    initialize_models()
+    initialize_models(representation_fn_name)
     rep_fn = get_representation_function(representation_fn_name)
     dist_fn = get_distance_function(distance_fn_name)
 

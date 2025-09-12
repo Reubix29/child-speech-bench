@@ -110,11 +110,11 @@ To register a distance function, you may likewise add a `@register_dist_fn("dist
 
 ## Results
 
-| Representation| Recall | Precision | F1 | ROC AUC | Balanced Accuracy |
-|:---|:---:|:---:|:---:|:---:|:---:|
-| **mHuBERT continuous**| 58.0 | 65.2 | 59.8 | 66.0 | **65.6** | 
-| **MFCCs** | **71.6** | 63.3 | **64.4** | 70.5 | 65.4 |
-| **Whisper English ASR** | 47.7 | **73.6** | 53.7 | **70.7** | 64.8| 
-| **HuBERT discrete** | 66.2 | 60.1 | 61.3 | 65.3 | 60.6 |
----
+| Representation| Recall | Precision | F1 | ROC AUC | False Alarm Rate | Miss Rate | Balanced Accuracy |
+|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **mHuBERT continuous**| 57.3 | 65.2 | 59.5 | 66.0 | 34.4 | 42.7 | **65.3** | 
+| **MFCCs** | **71.6** | 63.7 | **64.8** | 70.5 | 46.5 | **28.4** | 65.6 |
+| **Whisper English ASR** | 51.1 | **74.2** | 55.8 | **70.7** | **21.5** | 48.5 | 64.9| 
+| **HuBERT discrete** | 66.3 | 59.9 | 61.3 | 65.3 | 42.3 | 33.7 | 60.6 |
+-----
 

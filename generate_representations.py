@@ -36,7 +36,7 @@ def register_dist_fn(name):
 def initialize_models(rep_fn_names=None, training_data=None):
     """Initialize and store models and processors globally."""
     global models
-
+    print(rep_fn_names)
     # Add models and processors to the global models dictionary
     if "mhubert" in rep_fn_names:
         # mHuBERT
@@ -67,13 +67,15 @@ def initialize_models(rep_fn_names=None, training_data=None):
             )
         models["whisper"] = whisper_pipe
         models["whisper_processor"] = whisper_processor
+    elif "mfccs" in rep_fn_names:
+        pass
     else:
         raise ValueError("No valid representation function names provided for model initialization.")
     print("Models initialized successfully.")
 
 
 def preemphasis(signal, coeff=0.97):
-    """Perform preemphasis on the input `signal`."""    
+    """Perform preemphasis on the input signal."""    
     return np.append(signal[0], signal[1:] - coeff*signal[:-1])
 
 """
