@@ -15,13 +15,14 @@ import helpers
 import editdistance
 from speech_dtw.qbe import parallel_dtw_sweep_min as dtw
 
-rep_registry, dist_registry, models = {}, {}, {}
+rep_registry, rep_type_registry, dist_registry, models = {}, {}, {}, {}
 
-def register_rep_fn(name):
+def register_rep_fn(name, rep_type):
     """Decorator to register a representation function."""
     def decorator(func):
         helpers.validate_rep_fn(func)
         rep_registry[name] = func
+        rep_type_registry[name] = rep_type
         return func
     return decorator
 
@@ -33,10 +34,9 @@ def register_dist_fn(name):
         return func
     return decorator
 
-def initialize_models(rep_fn_names=None, training_data=None):
+def initialize_models(rep_fn_names=None):
     """Initialize and store models and processors globally."""
     global models
-    print(rep_fn_names)
     # Add models and processors to the global models dictionary
     if "mhubert" in rep_fn_names:
         # mHuBERT
@@ -84,7 +84,7 @@ Representation Functions
 =============================================
 """
 
-@register_rep_fn("mhubert")
+@register_rep_fn("mhubert", "continuous")
 def generate_mhubert_representations(audio):
     """Generate mHuBERT representations for the audio tensor."""
     processor = models.get("mhubert_processor")
@@ -99,7 +99,7 @@ def generate_mhubert_representations(audio):
     
     return hidden_states
 
-@register_rep_fn("mfccs")
+@register_rep_fn("mfccs", "continuous")
 def generate_mfccs(audio):
     sample_rate = 16000
     waveform = audio.squeeze(0).numpy()
@@ -124,7 +124,7 @@ def generate_mfccs(audio):
     
     return [mfccs]
 
-@register_rep_fn("hubert_discrete")
+@register_rep_fn("hubert_discrete", "discrete")
 def generate_speech_units(audio):
     hubert = models.get("hubert_discrete")
     encode = models.get("hubert_discrete_encode")
@@ -144,7 +144,7 @@ def generate_speech_units(audio):
 
     return units
 
-@register_rep_fn("whisper")
+@register_rep_fn("whisper", "discrete")
 def generate_whisper_representations(audio):
     whisper = models.get("whisper")
 
@@ -158,6 +158,13 @@ def get_representation_function(name):
     """Retrieve a registered representation function by name."""
     if name in rep_registry:
         return rep_registry[name]
+    else:
+        raise ValueError(f"Representation function '{name}' not found in registry. Available functions: {list(rep_registry.keys())}")
+    
+def get_representation_function_type(name):
+    """Retrieve a registered representation function type."""
+    if name in rep_type_registry:
+        return rep_type_registry[name]
     else:
         raise ValueError(f"Representation function '{name}' not found in registry. Available functions: {list(rep_registry.keys())}")
 

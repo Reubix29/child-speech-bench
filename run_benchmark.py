@@ -1,7 +1,8 @@
 import argparse
+import numpy as np
 import yaml
 from pathlib import Path
-from generate_representations import get_representation_function, get_distance_function, initialize_models
+from generate_representations import get_representation_function, get_representation_function_type, get_distance_function, initialize_models
 from helpers import calculate_metrics
 
 def get_settings(file_path):
@@ -47,6 +48,7 @@ if __name__ =="__main__":
 
     initialize_models(representation_fn_name)
     rep_fn = get_representation_function(representation_fn_name)
+    rep_fn_type = get_representation_function_type(representation_fn_name)
     dist_fn = get_distance_function(distance_fn_name)
 
     if not rep_fn or not dist_fn:
@@ -56,6 +58,7 @@ if __name__ =="__main__":
     metrics = calculate_metrics(
         file_path=dataset_path,
         rep_fn=rep_fn,
+        rep_type=rep_fn_type,
         dist_fn=dist_fn,
         template_ranking=template_ranking,
         template_dirname=template_dirname

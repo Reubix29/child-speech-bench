@@ -1,4 +1,6 @@
 import inspect
+import editdistance
+import random
 import numpy as np
 from pathlib import Path
 from pydub import AudioSegment
@@ -15,6 +17,8 @@ from sklearn.metrics import (
 import torch
 from tqdm import tqdm
 import tempfile
+from speech_dtw import _dtw
+
 
 def cache_representations(rep_fn, dataset_path, template_dirname, rep_type="continuous"):
     """
@@ -84,8 +88,6 @@ def validate_rep_fn(func):
     if sig.return_annotation not in (inspect._empty, np.ndarray):
         raise TypeError(f"Function '{func.__name__}' should return 'np.ndarray', got {sig.return_annotation}")
 
-    print(f"Function '{func.__name__}' validated successfully.")
-
 def validate_dist_fn(func):
     sig = inspect.signature(func)
     params = sig.parameters
@@ -98,7 +100,6 @@ def validate_dist_fn(func):
     if sig.return_annotation not in (inspect._empty, float):
         raise TypeError(f"Function '{func.__name__}' should return 'float', got {sig.return_annotation}")
 
-    print(f"Function '{func.__name__}' validated successfully.")
 
 def convert_to_wav(input_file, output_file):
     """
@@ -152,30 +153,104 @@ def preprocess(file_path, resample_rate=16000, overwrite=False):
 
     return audio, sr, used_path
 
-def extract_scores_and_labels(all_distances, groundtruths, strategy="avg"):
+def generate_neighbours(s, codebook_size=100):
+    codebook = range(codebook_size)
+    s = list(s)
+    neighbors = set()
+    for i in range(len(s)):
+        # Deletion
+        neighbors.add(tuple(s[:i] + s[i+1:]))
+        # Substitution
+        for c in codebook:
+            neighbors.add(tuple(s[:i] + [c] + s[i+1:]))
+    for i in range(len(s)+1):
+        # Insertion
+        for c in codebook:
+            neighbors.add(tuple(s[:i] + [c] + s[i:]))
+    return list(neighbors)
+
+def edb(sequences, max_iter=100, codebook_size=100):
     """
-    Flatten distances into scores and labels, consistent with old pipeline.
-    
+    Edit Distance Barycenter Averaging (EDBA) for discrete sequences.
+    """
+    median_length = int(np.median([len(s) for s in sequences]))
+    median_sequences = [s for s in sequences if len(s) == median_length]
+    current = random.choice(median_sequences) if median_sequences else random.choice(sequences)
+
+    best_score = sum(editdistance.eval(current, s) for s in sequences)
+
+    for _ in range(max_iter):
+        neighbors = generate_neighbours(current, codebook_size)
+        improved = False
+        for n in tqdm(neighbors, desc="Searching through neighbours", leave=False):
+            score = sum(editdistance.eval(n, s) for s in sequences)
+            if score < best_score:
+                current = n
+                best_score = score
+                improved = True
+                break
+        if not improved:
+            break
+
+    return list(current)
+
+def dba(embedding_sequences, n_iter=1):
+    """
+    Perform Dynamic Time Warping (DTW) Barycenter Averaging (DBA) on a set of embeddings.
+
     Args:
-        all_distances (dict): {"dev": {class: [distances]}, "test": {...}}
-        groundtruths (dict): {"dev": {class: [labels]}, "test": {...}}
-        strategy (str): "min" or "avg" (only needed if you stored multiple template distances).
-    
+    - embeddings_sequences (list): List of sequences of embeddings.
+    - n_iter (int): Number of iterations to perform.
+
     Returns:
-        scores_dev, labels_dev, scores_test, labels_test
+    - barycenter (torch.Tensor): Barycenter of the embeddings.
     """
-    # Convert distances -> scores (1 - distance), as in old code
-    dev_distances = np.concatenate([np.array(all_distances["dev"][cls]) for cls in all_distances["dev"]])
-    dev_labels = np.concatenate([np.array(groundtruths["dev"][cls]) for cls in groundtruths["dev"]])
-    dev_scores = 1 - dev_distances
+    dtw_path_function = _dtw.multivariate_dtw
 
-    test_distances = np.concatenate([np.array(all_distances["test"][cls]) for cls in all_distances["test"]])
-    test_labels = np.concatenate([np.array(groundtruths["test"][cls]) for cls in groundtruths["test"]])
-    test_scores = 1 - test_distances
+    # Get the median length of sequences
+    # if embedding sequences is a list, make it a np array
+    if isinstance(embedding_sequences, list):
+        embedding_sequences = np.array(embedding_sequences, dtype=object)
+    seq_lengths = [seq.shape[1] for seq in embedding_sequences]
 
-    return dev_scores, dev_labels, test_scores, test_labels
+    median_length = int(np.median(seq_lengths))
+    closest_length = min(seq_lengths, key=lambda x: abs(x - median_length)) 
+    reference_index = seq_lengths.index(closest_length)
+    reference_sequence = np.asarray(embedding_sequences[reference_index], dtype=np.float64).squeeze()
 
-def calculate_metrics(file_path, template_dirname, rep_fn, dist_fn, template_ranking):
+    # Perform the DBA iterations
+    for n in range(n_iter):
+        # Compute the DTW path between the reference sequence and each sequence
+        dtw_paths = []
+        for sequence in embedding_sequences:
+            path = dtw_path_function(reference_sequence, np.array(sequence, dtype=np.float64).squeeze())[0]
+            dtw_paths.append(path)
+        
+        # Compute the DBA sequence
+        dba_sequence = reference_sequence.copy() # Start with the reference sequence vectors
+        dba_counts = np.zeros(reference_sequence.shape[1]) # Keep track of the number of vectors summed for each coordinate
+        for j in range(len(embedding_sequences)):
+            path = dtw_paths[j]
+            sequence = embedding_sequences[j].squeeze()
+            for k in range(len(path)):
+                i, j = path[k]
+                if sequence[j, :].dtype == torch.float32:
+                    sequence_np = sequence[j, :].detach().numpy()
+                else:
+                    sequence_np = sequence[j, :]
+                dba_sequence[i, :] += sequence_np
+                dba_counts[i] += 1
+        
+        # Avoid division by zero
+        dba_counts[dba_counts == 0] = 1  
+        dba_sequence = dba_sequence / dba_counts
+
+        # Update the reference sequence
+        reference_sequence = dba_sequence
+
+    return [dba_sequence]
+
+def calculate_metrics(file_path, template_dirname, rep_fn, dist_fn, template_ranking, rep_type="continuous"):
     """
     Calculate classification metrics for a given dataset, using a representation function and a distance function.
 
@@ -193,12 +268,10 @@ def calculate_metrics(file_path, template_dirname, rep_fn, dist_fn, template_ran
     all_distances = {"dev": {}, "test": {}}
     groundtruths = {"dev": {}, "test": {}}
 
-    # ---- Step 1: collect distances and ground truths ----
+    # ---- Collect distances and ground truths ----
     for split in ["dev", "test"]:
         querypath = file_path / "query" / split
-        for bucket in tqdm(
-            list(querypath.iterdir()), desc=f"Processing {split} set"
-        ):
+        for bucket in tqdm(list(querypath.iterdir()), desc=f"Processing {split} set"):
             if bucket.is_dir():
                 # Load template features
                 template_features = []
@@ -209,38 +282,50 @@ def calculate_metrics(file_path, template_dirname, rep_fn, dist_fn, template_ran
                     template_audio, _, _ = preprocess(template_file)
                     template_features.append(rep_fn(template_audio))
 
+                if template_ranking == "barycentre":
+                    if rep_type == "continuous":
+                        template_features = dba(template_features)
+                    else:
+                        template_features = edb(template_features)
                 # Query distances
                 bucket_distances = []
-                for audio_file in bucket.glob("*.wav"):
+                query_files = sorted(bucket.glob("*.wav"))
+                query_names = [f.stem for f in query_files]
+                for audio_file in query_files:
                     audio, sr, _ = preprocess(audio_file)
                     query_features = rep_fn(audio)
-                    distances = [dist_fn(query_features, tf) for tf in template_features]
                     if template_ranking == "avg":
-                        distance_val = float(np.mean(distances))
+                        distance_val = float(np.mean([dist_fn(query_features, tf) for tf in template_features]))
                     elif template_ranking == "min":
-                        distance_val = float(np.min(distances))
+                        distance_val = float(np.min([dist_fn(query_features, tf) for tf in template_features]))
+                    elif template_ranking == "barycentre":
+                        if rep_type == "discrete":
+                            distance_val = dist_fn(query_features, template_features)
+                        else:  
+                            distance_val = dist_fn(query_features, template_features)
+                            distance_val = distance_val[0][0]
                     else:
                         raise ValueError(f"Unknown template_ranking: {template_ranking}")
                     bucket_distances.append(distance_val)
 
                 all_distances[split][bucket.name] = bucket_distances
-                groundtruths[split][bucket.name] = [
-                    1 if bucket.name == query_file.name.split("_")[0] else 0
-                    for query_file in bucket.glob("*.wav")
-                ]
+                groundtruths[split][bucket.name] = [1 if bucket.name == qn.split("_")[0] else 0 for qn in query_names]
 
-    # ---- Step 2: find best threshold on dev (max balanced accuracy) ----
+    # ---- Find best threshold on dev (max balanced accuracy) ----
     dev_distances = np.concatenate([np.array(all_distances["dev"][cls]) for cls in all_distances["dev"]])
     dev_groundtruth = np.concatenate([np.array(groundtruths["dev"][cls]) for cls in groundtruths["dev"]])
-
     thresholds = np.linspace(0, 1, 200)
-    baccs = {}
+    baccs, recs, precs, f1s = {}, {}, {}, {}
     for th in thresholds:
         preds = (dev_distances < th).astype(int)
         baccs[th] = balanced_accuracy_score(dev_groundtruth, preds)
+        recs[th] = recall_score(dev_groundtruth, preds, zero_division=0)
+        precs[th] = precision_score(dev_groundtruth, preds, zero_division=0)
+        f1s[th] = f1_score(dev_groundtruth, preds, zero_division=0)
     best_threshold = max(baccs, key=baccs.get)
+ 
 
-    # ---- Step 3: evaluate on test, per class, then average ----
+    # ---- Evaluate on test, per class, then average ----
     test_precision, test_recall, test_f1, test_roc, test_far, test_mr = [], [], [], [], [], []
 
     for cls in all_distances["test"]:

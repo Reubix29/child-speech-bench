@@ -18,7 +18,7 @@ This benchmark evaluates how well different **speech representation** and **dist
 
 3. This threshold is then applied to classify samples in the test set.
 
-4. The system reports performance using **recall**, **precision**, **F1 score**, **balanced accuracy**, and **AUC** on the test set.
+4. The system reports performance using **recall**, **precision**, **F1 score**, **AUC**, **false alarm rate**, **miss rate** and **balanced accuracy** on the test set.
 
 The goal is to find the combination of representation and distance method that gives the best **balanced accuracy**, especially in low-resource speech settings.
 
@@ -45,15 +45,18 @@ The goal is to find the combination of representation and distance method that g
         - **whisper**: English Whisper transcriptions.
         - or [create your own](#test-a-custom-representation-or-distance-method)
     - Select a distance function:
-        - **dtw**: dynamic time warping. This is the default for continuous representations. 
-        - **ned**: normalised edit distance. This is the default for discrete representations.
+        - **dtw**: dynamic time warping. This is usually used for continuous representations. 
+        - **ned**: normalised edit distance. This is usually used for discrete representations.
         - or [create your own](#test-a-custom-representation-or-distance-method)
-    - Choose whether to average (**avg**) the distances from the query to the template representations, or select the minimum distance (**min**).
-    - Choose the speaker you would like to use. In [ISACS](https://reubix29.github.io/isolated-afrikaans-child-speech/), there are four speakers available:
-        - sp_1
-        - sp_2
-        - sp_3
-        - child
+    - Select a template ranking method:
+        - **avg**: average the distances from the query to the template representations
+        - **min**: select the minimum distance of all the templates
+        - **barycentre**: Calculate a single representative example of the templates, which results in a single distance value between each query and the barycentre representation.
+    - Choose the template speaker you would like to use. In [ISACS](https://reubix29.github.io/isolated-afrikaans-child-speech/), there are four speakers available:
+        - **sp_1** : Male 1
+        - **sp_2** : Female 1
+        - **sp_3** : Male 2
+        - **child** : Child templates selected from the *train* set of the babaloon dataset.
 
 5. In your terminal, run `python run_benchmark.py`, which should result in a list of metrics.
 
@@ -101,20 +104,25 @@ For an example of correct structure, look at the structure of [ISACS](https://re
 
 A working representation function should take in a `torchaudio` [Tensor](https://docs.pytorch.org/audio/stable/generated/torchaudio.load.html#torchaudio.load) as a parameter, and return a continuous or discrete representation of that audio.
 
-Next, you must add a `@register_rep_fn("rep_fn_alias")` decorator above the custom representation function to register it. You may then select it in `map.yml` by setting `representation_function : "rep_fn_alias"`.
+Next, you must add a `@register_rep_fn("rep_fn_alias", "rep_fn_type")` decorator above the custom representation function to register it. `rep_fn_alias` is a shorthand name for the representation function that you can use when selecting it in map.yml. `rep_fn_type` is either `"continuous"` or `"discrete"`. After registering your representation function, you may select it in `map.yml` by setting `representation_function : "rep_fn_alias"`.
 
-By default, continuous representations can be evaluated with dynamic time warping, and discrete representations can be evaluated with normalised edit distance, but you may need to create a custom distance method depending on your representation function.
+Continuous representations can be evaluated with dynamic time warping (`dtw`), and discrete representations can be evaluated with normalised edit distance (`ned`), but you may need to create a custom distance method depending on your representation function.
 
-To register a distance function, you may likewise add a `@register_dist_fn("dist_fn_alias")` above your distance function to register it. Then select it in `map.yml` by setting `distance_function : "dist_fn_alias"`.
+To register a distance function, similar to the representation functions, you may add a `@register_dist_fn("dist_fn_alias")` above your distance function to register it. Then select it in `map.yml` by setting `distance_function : "dist_fn_alias"`.
 
 
-## Results
-
-| Representation| Recall | Precision | F1 | ROC AUC | False Alarm Rate | Miss Rate | Balanced Accuracy |
+## Results on ISACS (sp_1)
+| Representation (*ranking*)| Recall | Precision | F1 | ROC AUC | False Alarm Rate | Miss Rate | Balanced Accuracy |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **mHuBERT continuous**| 57.3 | 65.2 | 59.5 | 66.0 | 34.4 | 42.7 | **65.3** | 
-| **MFCCs** | **71.6** | 63.7 | **64.8** | 70.5 | 46.5 | **28.4** | 65.6 |
-| **Whisper English ASR** | 51.1 | **74.2** | 55.8 | **70.7** | **21.5** | 48.5 | 64.9| 
-| **HuBERT discrete** | 66.3 | 59.9 | 61.3 | 65.3 | 42.3 | 33.7 | 60.6 |
+| **MFCCs** (*avg*)| 71.6 | 63.7 | 64.8 | 70.5 | 46.5 | 28.4 | 65.6 |
+| **mHuBERT continuous** (*avg*) | 57.3 | 65.2 | 59.5 | 66.0 | 34.4 | 42.7 | 65.3 | 
+| **mHuBERT continuous** (*barycentre*) | 61.0 | 62.7 | 60.7 | 65.9 | 39.7 | 39.0 | 65.3 | 
+| **Whisper English ASR** (*avg*)| 51.1 | 74.2 | 55.8 | 70.7 | 21.5 | 48.5 | 64.9| 
+| **HuBERT discrete** (*min*)| 61.7 | 63.9 | 61.6 | 66.3 | 36.1 | 38.3 | 63.0 | 
+| **mHuBERT continuous** (*min*) | 49.7 | 64.0 | 53.7 | 63.8 | 31.6 | 50.3 | 63.0 | 
+| **MFCCs** (*min*)| 86.3 | 60.11 | 69.6 | 69.3 | 62.7 | 13.7 | 62.3 | 
+| **HuBERT discrete** (*avg*)| 66.3 | 59.9 | 61.3 | 65.3 | 42.3 | 33.7 | 60.6 |
+| **HuBERT discrete** (*barycentre*) | 45.3 | 61.6 | 50.0 | 68.2 | 24.5 | 54.7 | 58.8 |
 -----
+
 
