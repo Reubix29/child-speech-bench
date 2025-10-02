@@ -111,7 +111,7 @@ Continuous representations can be evaluated with dynamic time warping (`dtw`), a
 To register a distance function, similar to the representation functions, you may add a `@register_dist_fn("dist_fn_alias")` above your distance function to register it. Then select it in `map.yml` by setting `distance_function : "dist_fn_alias"`.
 
 
-## Results on ISACS (sp_1)
+## Results on Afrikaans dataset (ISACS - sp_1)
 | Representation (*ranking*)| Recall | Precision | F1 | ROC AUC | False Alarm Rate | Miss Rate | Balanced Accuracy |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | **MFCCs** (*avg*)| 71.6 | 63.7 | 64.8 | 70.5 | 46.5 | 28.4 | 65.6 |
@@ -123,6 +123,17 @@ To register a distance function, similar to the representation functions, you ma
 | **MFCCs** (*min*)| 86.3 | 60.11 | 69.6 | 69.3 | 62.7 | 13.7 | 62.3 | 
 | **HuBERT discrete** (*avg*)| 66.3 | 59.9 | 61.3 | 65.3 | 42.3 | 33.7 | 60.6 |
 | **HuBERT discrete** (*barycentre*) | 45.3 | 61.6 | 50.0 | 68.2 | 24.5 | 54.7 | 58.8 |
+## Results on isiXhosa dataset (ISXCS - sp_1)
+| Representation (*ranking*)| Recall | Precision | F1 | ROC AUC | False Alarm Rate | Miss Rate | Balanced Accuracy |
+|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **HuBERT discrete** (*min*)| 66.5 | 74.0 | 69.5 | 77.2 | 24.8 | 33.6 | 71.0 | 
+| **HuBERT discrete** (*avg*)| 66.7 | 73.8 | 69.3 | 79.4 | 25.2 | 33.3 | 70.8 |
+| **HuBERT discrete** (*barycentre*) | 63.9 | 74.4 | 68.2 | 79.1 | 22.9 | 36.1 | 70.4 |
+| **Whisper English ASR** (*avg*)| 56.8 | 75.2 | 64.2 | 73.1 | 19.3 | 43.2 | 68.2|
+| **mHuBERT continuous** (*avg*) | 53.0 | 73.4 | 61.3 | 71.7 | 19.4 | 47.0 | 67.2 | 
+| **mHuBERT continuous** (*barycentre*) | 55.1 | 71.5 | 62.0 | 72.1 | 22.2 | 44.9 | 66.8 |
+| **mHuBERT continuous** (*min*) | 53.3 | 72.3 | 61.1 | 71.8 | 20.5 | 46.8 | 66.8 |
+| **MFCCs** (*min*)| 100.0 | 50.0 | 66.7 | 40.8 | 100.0 | 0.0 | 50.0 |
+| **MFCCs** (*avg*)| 100.0 | 50.0 | 66.7 | 40.8 | 100.0 | 0.0 | 50.0 |
 -----
-
 

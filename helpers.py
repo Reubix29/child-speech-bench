@@ -194,58 +194,57 @@ def edb(sequences, max_iter=100, codebook_size=100):
 
     return list(current)
 
+def ensure_2d(seq):
+    arr = np.asarray(seq, dtype=np.float64)
+    # Flatten batch or channel dimensions
+    if arr.ndim == 3:
+        # If (1, T, D) → (T, D)
+        if arr.shape[0] == 1:
+            arr = arr[0]
+        # If (T, D, 1) → (T, D)
+        elif arr.shape[2] == 1:
+            arr = arr[:, :, 0]
+        else:
+            raise ValueError(f"Unexpected 3D shape for sequence: {arr.shape}")
+    elif arr.ndim == 1:
+        # Edge case: single feature vector → make it (1, D)
+        arr = arr.reshape(1, -1)
+    return arr
+
 def dba(embedding_sequences, n_iter=1):
     """
-    Perform Dynamic Time Warping (DTW) Barycenter Averaging (DBA) on a set of embeddings.
-
-    Args:
-    - embeddings_sequences (list): List of sequences of embeddings.
-    - n_iter (int): Number of iterations to perform.
-
-    Returns:
-    - barycenter (torch.Tensor): Barycenter of the embeddings.
+    Perform Dynamic Time Warping (DTW) Barycenter Averaging (DBA).
     """
     dtw_path_function = _dtw.multivariate_dtw
 
-    # Get the median length of sequences
-    # if embedding sequences is a list, make it a np array
-    if isinstance(embedding_sequences, list):
-        embedding_sequences = np.array(embedding_sequences, dtype=object)
-    seq_lengths = [seq.shape[1] for seq in embedding_sequences]
+    # Keep list of sequences (do NOT stack them into np.array)
+    seq_lengths = [seq.shape[0] for seq in embedding_sequences]
 
+    # Pick reference sequence: closest to median length
     median_length = int(np.median(seq_lengths))
-    closest_length = min(seq_lengths, key=lambda x: abs(x - median_length)) 
+    closest_length = min(seq_lengths, key=lambda x: abs(x - median_length))
     reference_index = seq_lengths.index(closest_length)
-    reference_sequence = np.asarray(embedding_sequences[reference_index], dtype=np.float64).squeeze()
+    reference_sequence = np.asarray(embedding_sequences[reference_index], dtype=np.float64)
 
-    # Perform the DBA iterations
-    for n in range(n_iter):
-        # Compute the DTW path between the reference sequence and each sequence
+    for _ in range(n_iter):
         dtw_paths = []
         for sequence in embedding_sequences:
-            path = dtw_path_function(reference_sequence, np.array(sequence, dtype=np.float64).squeeze())[0]
+            ref = ensure_2d(reference_sequence)
+            seq = ensure_2d(sequence)
+            path = dtw_path_function(ref, seq)[0]
             dtw_paths.append(path)
-        
-        # Compute the DBA sequence
-        dba_sequence = reference_sequence.copy() # Start with the reference sequence vectors
-        dba_counts = np.zeros(reference_sequence.shape[1]) # Keep track of the number of vectors summed for each coordinate
-        for j in range(len(embedding_sequences)):
-            path = dtw_paths[j]
-            sequence = embedding_sequences[j].squeeze()
-            for k in range(len(path)):
-                i, j = path[k]
-                if sequence[j, :].dtype == torch.float32:
-                    sequence_np = sequence[j, :].detach().numpy()
-                else:
-                    sequence_np = sequence[j, :]
-                dba_sequence[i, :] += sequence_np
-                dba_counts[i] += 1
-        
-        # Avoid division by zero
-        dba_counts[dba_counts == 0] = 1  
-        dba_sequence = dba_sequence / dba_counts
 
-        # Update the reference sequence
+        dba_sequence = ref.copy()
+        dba_counts = np.zeros((ref.shape[0], 1))
+
+        for seq, path in zip(embedding_sequences, dtw_paths):
+            seq = ensure_2d(seq)
+            for i, j in path:
+                dba_sequence[i, :] += seq[j, :]
+                dba_counts[i] += 1
+
+        dba_counts[dba_counts == 0] = 1
+        dba_sequence = dba_sequence / dba_counts
         reference_sequence = dba_sequence
 
     return [dba_sequence]
