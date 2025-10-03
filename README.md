@@ -111,7 +111,8 @@ Continuous representations can be evaluated with dynamic time warping (`dtw`), a
 To register a distance function, similar to the representation functions, you may add a `@register_dist_fn("dist_fn_alias")` above your distance function to register it. Then select it in `map.yml` by setting `distance_function : "dist_fn_alias"`.
 
 
-## Results on Afrikaans dataset (ISACS - sp_1)
+## Results on Afrikaans dataset (ISACS)
+### sp_1 (adult male)
 | Representation (*ranking*)| Recall | Precision | F1 | ROC AUC | False Alarm Rate | Miss Rate | Balanced Accuracy |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | **MFCCs** (*avg*)| 71.6 | 63.7 | 64.8 | 70.5 | 46.5 | 28.4 | 65.6 |
@@ -123,7 +124,20 @@ To register a distance function, similar to the representation functions, you ma
 | **MFCCs** (*min*)| 86.3 | 60.11 | 69.6 | 69.3 | 62.7 | 13.7 | 62.3 | 
 | **HuBERT discrete** (*avg*)| 66.3 | 59.9 | 61.3 | 65.3 | 42.3 | 33.7 | 60.6 |
 | **HuBERT discrete** (*barycentre*) | 45.3 | 61.6 | 50.0 | 68.2 | 24.5 | 54.7 | 58.8 |
-## Results on isiXhosa dataset (ISXCS - sp_1)
+### sp_1_vc (adult male voice converted to child voice)
+| Representation (*ranking*)| Recall | Precision | F1 | ROC AUC | False Alarm Rate | Miss Rate | Balanced Accuracy |
+|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **mHuBERT continuous** (*barycentre*) | 67.2 | 61.9 | 63.6 | 65.0 | 44.2 | 32.8 | 66.2 | 
+| **mHuBERT continuous** (*min*) | 67.6 | 59.7 | 62.6 | 64.8 | 48.2 |32.4 | 64.0 |
+| **mHuBERT continuous** (*avg*) | 65.6 | 58.9 | 61.4 | 64.0 | 47.2 | 34.4 | 63.5 |
+| **MFCCs** (*avg*)| 71.4 | 56.1 | 61.4 | 63.4 | 54.9 | 28.6 | 61.9 | 
+| **Whisper English ASR** (*avg*)| 46.6 | 62.4 | 49.6 | 65.4 | 24.4 | 53.4 | 60.1
+| **HuBERT discrete** (*min*)| 76.0 | 56.1 | 64.0 | 62.7 | 59.8 | 24.0 | 58.9 |
+| **HuBERT discrete** (*barycentre*) | 41.7 | 65.7 | 45.9 | 61.2 | 25.2 | 58.3 | 58.1 |
+| **MFCCs** (*min*)| 83.7 | 52.8 | 64.0 | 59.1 | 75.1 | 16.3 | 57.1 | 
+| **HuBERT discrete** (*avg*)| 78.8 | 53.0 | 62.9 | 63.2 | 69.7 | 21.2 | 56.2 |
+## Results on isiXhosa dataset (ISXCS)
+### sp_1
 | Representation (*ranking*)| Recall | Precision | F1 | ROC AUC | False Alarm Rate | Miss Rate | Balanced Accuracy |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | **HuBERT discrete** (*min*)| 66.5 | 74.0 | 69.5 | 77.2 | 24.8 | 33.6 | 71.0 | 

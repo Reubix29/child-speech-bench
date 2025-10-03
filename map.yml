@@ -1,5 +1,5 @@
 dataset_path: "data/isacs" # path to the dataset
-representation_fn: "mfccs" # the name of your custom representation function in generate_representations.py
-distance_fn: "dtw" # options: dtw, ned, or a custom function
+representation_fn: "whisper" # the name of your custom representation function in generate_representations.py
+distance_fn: "ned" # options: dtw, ned, or a custom function
 template_ranking: "avg" # options: avg, min, barycentre
-template_dirname: "sp_1" # directory name for the template files. options in ISACS: sp_1, sp_2, sp_3, child
+template_dirname: "sp_1_vc" # directory name for the template files. options in ISACS: sp_1, sp_2, sp_3, child
